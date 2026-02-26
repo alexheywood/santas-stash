@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Santa's Stash</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        #map { height: 100%; width: 100%; cursor: crosshair; }
+        .hidden { display: none !important; }
+        
+        .glass {
+            background: rgba(20, 30, 45, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: #064e3b;
+            color: #fff;
+            border-radius: 12px;
+        }
+
+        /* Snow Animation Canvas */
+        #snow-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10000;
+            transition: opacity 1s ease-out;
+        }
+
+        /* Festive colors */
+        .text-festive-gold { color: #facc15; }
+        
+        /* Responsive layout for mobile */
+        @media (max-width: 768px) {
+            #game-container { flex-direction: column; }
+            #image-panel { height: 40vh; width: 100%; }
+            #map-panel { height: 60vh; width: 100%; }
+        }
+
+        .festive-pulse {
+            animation: festive-pulse 2s infinite;
+        }
+        @keyframes festive-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white overflow-hidden h-screen">
+
+    <canvas id="snow-canvas"></canvas>
+
+    <!-- START MENU -->
+    <div id="start-menu" class="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-slate-950">
+        <div class="absolute inset-0 opacity-40 pointer-events-none overflow-hidden">
+            <img src="https://images.unsplash.com/photo-1543589077-47d81606c1bf?auto=format&fit=crop&q=80&w=2000" class="w-full h-full object-cover" />
+            <div class="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950"></div>
+        </div>
+        
+        <div class="relative w-full max-w-5xl grid md:grid-cols-2 gap-12 items-center">
+            <div class="text-center md:text-left">
+                <div class="inline-block bg-red-600 text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-[0.2em] mb-4">Festive Edition</div>
+                <h1 class="text-7xl font-extrabold text-white leading-none mb-4 tracking-tighter italic uppercase">Santa's<br><span class="text-red-500">Stash!</span></h1>
+                <p class="text-slate-300 text-xl mb-8 max-w-md mx-auto md:mx-0 font-medium">How well do you know the Vale of Glamorgan? Drop a pin as near as possible to Vale landmarks to guide Santa to his toys!</p>
+                <button id="btn-start" class="bg-red-600 hover:bg-red-500 text-white text-2xl font-black px-12 py-5 rounded-2xl transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-red-600/30 flex items-center gap-3 mx-auto md:mx-0">
+                    🎄 START DROPPING
+                </button>
+            </div>
+
+            <!-- Leaderboard -->
+            <div class="glass rounded-[2rem] p-8 h-[500px] flex flex-col shadow-2xl overflow-hidden border border-red-500/20">
+                <h3 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                    <span class="text-yellow-400">⭐</span> WINTER LEGENDS
+                </h3>
+                <div id="leaderboard" class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME UI -->
+    <div id="game-ui" class="h-screen flex flex-col hidden">
+        <header class="bg-red-900/40 backdrop-blur-md p-4 border-b border-white/10 flex justify-between items-center z-20 shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="text-3xl">🎅</div>
+                <div>
+                    <span class="text-red-200 text-[10px] font-bold uppercase tracking-widest">Santa's Stash!</span>
+                    <h2 class="text-lg font-black text-white italic">ROUND <span id="round-current">1</span>/5</h2>
+                </div>
+            </div>
+            <div class="flex gap-4 items-center">
+                <div class="text-right">
+                    <p class="text-[10px] text-red-200 font-bold uppercase tracking-widest leading-none mb-1">Stocking Filler Score</p>
+                    <p id="total-score" class="text-2xl font-black text-yellow-400 leading-none">0</p>
+                </div>
+            </div>
+        </header>
+
+        <main id="game-container" class="flex-1 flex overflow-hidden relative">
+            <section id="image-panel" class="w-full md:w-1/2 relative bg-slate-900 overflow-hidden">
+                <img id="landmark-img" src="" class="w-full h-full object-cover transition-opacity duration-700 opacity-0" />
+                <div id="image-loader" class="absolute inset-0 flex items-center justify-center bg-slate-900">
+                    <div class="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <div class="absolute bottom-6 left-6 right-6 pointer-events-none">
+                    <div class="glass p-4 rounded-2xl border border-red-500/20">
+                        <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">🎁 Festive Hint</p>
+                        <p id="landmark-hint" class="text-sm text-slate-100 font-medium"></p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="map-panel" class="w-full md:w-1/2 relative">
+                <div id="map"></div>
+                <div class="absolute bottom-10 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-[280px] px-4">
+                    <button id="btn-guess" disabled class="w-full bg-red-600 disabled:bg-slate-800 disabled:text-slate-500 text-white py-4 rounded-2xl font-black text-lg shadow-2xl transition-all active:scale-95 shadow-red-600/30">
+                        DROP PRESENT HERE
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- RESULT MODAL -->
+    <div id="result-modal" class="fixed inset-0 z-[6000] bg-slate-950/90 backdrop-blur-xl hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-slate-900 border border-red-500/20 rounded-[2.5rem] p-10 text-center shadow-2xl">
+            <div id="result-icon" class="text-6xl mb-6">🤶</div>
+            <h2 id="result-title" class="text-4xl font-black text-white mb-2 tracking-tight uppercase italic">JOLLY GOOD!</h2>
+            
+            <div class="grid grid-cols-2 gap-4 my-8">
+                <div class="bg-white/5 rounded-2xl p-4 border border-white/5">
+                    <p class="text-[10px] text-red-300 font-bold uppercase tracking-widest mb-1">Sleigh Travel</p>
+                    <p id="result-distance" class="text-2xl font-black text-red-400"></p>
+                </div>
+                <div class="bg-white/5 rounded-2xl p-4 border border-white/5">
+                    <p class="text-[10px] text-red-300 font-bold uppercase tracking-widest mb-1">Gift Points</p>
+                    <p id="result-points" class="text-2xl font-black text-yellow-400"></p>
+                </div>
+            </div>
+
+            <button id="btn-next" class="w-full bg-red-600 hover:bg-red-500 text-white py-5 rounded-2xl font-black text-xl transition-all active:scale-95">
+                ONWARDS TO NEXT STOP
+            </button>
+        </div>
+    </div>
+
+    <!-- FINAL OVERLAY -->
+    <div id="final-overlay" class="fixed inset-0 z-[7000] bg-slate-950 hidden flex flex-col items-center justify-center p-6 text-center">
+        <div class="text-8xl mb-6">🎁</div>
+        <h2 class="text-5xl font-black mb-2 tracking-tighter italic uppercase">Gifts found!</h2>
+        <p class="text-slate-400 text-lg mb-10 max-w-xs">Thanks for helping Santa remember where he left his gifts!</p>
+        <div class="bg-white/5 border border-red-500/20 rounded-3xl p-8 mb-10 w-full max-w-sm">
+            <p class="text-xs font-bold text-red-400 uppercase tracking-widest mb-2">Festive Grand Total</p>
+            <p id="final-total" class="text-7xl font-black text-yellow-400">0</p>
+        </div>
+        <button onclick="location.reload()" class="bg-red-600 text-white px-12 py-5 rounded-2xl font-black text-xl hover:bg-red-500 transition-all">
+            PLAY AGAIN 🎄
+        </button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const landmarkData = {
+            "locations": [
+                { "id": 1, "name": "Nash Point Lighthouse", "url": "https://www.ephotozine.com/resize/2020/15/xlrg/5772_1587296501.jpg?RTUdGk5cXyJFAggJSEc4eghnfAYYGkVUGwBdOh80SxgRBAAhdSMKY1dhB2osTU0LIjUVDw==", "coords": [51.4026, -3.5512], "hint": "Grade II listed lighthouse on the Monknash coast." },
+                { "id": 2, "name": "St Donat's Castle", "url": "https://tse4.mm.bing.net/th/id/OIP.VkW6viHytS-Euoi3mthD1wHaE5?rs=1&pid=ImgDetMain&o=7&rm=3", "coords": [51.4019, -3.5332], "hint": "Home to Atlantic College and spectacular terraced gardens." },
+                { "id": 3, "name": "Barry Island Seafront", "url": "https://www.sykescottages.co.uk/inspiration/wp-content/uploads/barry-island-1.jpg", "coords": [51.3897, -3.2751], "hint": "The vibrant promenade of Whitmore Bay." },
+                { "id": 4, "name": "Penarth Pier", "url": "https://global-uploads.webflow.com/602452bf511ad639c3e8aab6/6076a0cabb1bdf2a23640db6_PLO_8158-p-1600.jpeg", "coords": [51.4341, -3.1645], "hint": "Art Deco architectural gem on the Esplanade." },
+                { "id": 5, "name": "Dyffryn House", "url": "https://c8.alamy.com/comp/B5A5Y8/dyffryn-house-dyffryn-house-and-gardens-vale-of-glamorgan-south-wales-B5A5Y8.jpg", "coords": [51.4428, -3.3033], "hint": "Magnificent Edwardian gardens near St Nicholas." }
+            ]
+        };
+
+        const mockLeaderboard = [
+            { name: "Nessa Jenkins", score: 24850 }, { name: "Smithy", score: 23900 }, { name: "Bryn West", score: 23100 }, { name: "Gavin Shipman", score: 22400 }, { name: "Stacey West", score: 21900 }, { name: "Dave Coaches", score: 20500 }, { name: "Pam Shipman", score: 19800 }, { name: "Mick Shipman", score: 18400 }, { name: "Dawn Sutcliffe", score: 17200 }, { name: "Pete Sutcliffe", score: 16500 }, { name: "Owain Hughes", score: 15100 }, { name: "Doris", score: 14200 }, { name: "Neil the Baby", score: 13000 }, { name: "Jason West", score: 11900 }, { name: "Japanese Margaret", score: 10500 }, { name: "Big Gary", score: 9200 }, { name: "Deano", score: 8100 }, { name: "Budgie", score: 7400 }, { name: "Rudi", score: 6200 }, { name: "Coach Trip Guy", score: 5100 }
+        ];
+
+        let currentRound = 0;
+        let totalScore = 0;
+        let map, userMarker, correctMarker, lineToCorrect;
+        let selectedCoords = null;
+        let roundActive = false;
+        let snowAnimationId = null;
+
+        function initSnow() {
+            const canvas = document.getElementById('snow-canvas');
+            const ctx = canvas.getContext('2d');
+            let width, height;
+            let flakes = [];
+
+            function resize() {
+                width = canvas.width = window.innerWidth;
+                height = canvas.height = window.innerHeight;
+            }
+
+            function createFlakes() {
+                flakes = [];
+                for (let i = 0; i < 150; i++) {
+                    flakes.push({
+                        x: Math.random() * width, y: Math.random() * height,
+                        radius: Math.random() * 3 + 1, speed: Math.random() * 1 + 0.5,
+                        opacity: Math.random() * 0.5 + 0.3
+                    });
+                }
+            }
+
+            function update() {
+                if (!snowAnimationId) return;
+                ctx.clearRect(0, 0, width, height);
+                ctx.fillStyle = 'white';
+                flakes.forEach(f => {
+                    f.y += f.speed;
+                    f.x += Math.sin(f.y / 50) * 0.5;
+                    if (f.y > height) f.y = -10;
+                    if (f.x > width) f.x = 0;
+                    if (f.x < 0) f.x = width;
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
+                    ctx.globalAlpha = f.opacity;
+                    ctx.fill();
+                });
+                snowAnimationId = requestAnimationFrame(update);
+            }
+
+            window.addEventListener('resize', resize);
+            resize();
+            createFlakes();
+            snowAnimationId = requestAnimationFrame(update);
+        }
+
+        function stopSnow() {
+            const canvas = document.getElementById('snow-canvas');
+            canvas.style.opacity = '0';
+            setTimeout(() => {
+                cancelAnimationFrame(snowAnimationId);
+                snowAnimationId = null;
+                canvas.classList.add('hidden');
+            }, 1000);
+        }
+
+        function init() {
+            initSnow();
+            const board = document.getElementById('leaderboard');
+            board.innerHTML = mockLeaderboard.map((player, i) => `
+                <div class="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5 hover:border-red-500/30 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-yellow-500 w-6">${i + 1}</span>
+                        <span class="font-semibold text-slate-200 text-sm">${player.name}</span>
+                    </div>
+                    <span class="font-mono font-bold text-white">${player.score.toLocaleString()}</span>
+                </div>
+            `).join('');
+
+            map = L.map('map', { zoomControl: false, attributionControl: false }).setView([51.415, -3.35], 11);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            map.on('click', onMapClick);
+
+            document.getElementById('btn-start').addEventListener('click', startGame);
+            document.getElementById('btn-guess').addEventListener('click', submitGuess);
+            document.getElementById('btn-next').addEventListener('click', nextRound);
+        }
+
+        function startGame() {
+            stopSnow(); // Stop the snow effect
+            document.getElementById('start-menu').classList.add('hidden');
+            document.getElementById('game-ui').classList.remove('hidden');
+            map.invalidateSize();
+            loadRound();
+        }
+
+        function loadRound() {
+            roundActive = true;
+            const landmark = landmarkData.locations[currentRound];
+            document.getElementById('round-current').innerText = currentRound + 1;
+            document.getElementById('landmark-hint').innerText = landmark.hint;
+            document.getElementById('btn-guess').disabled = true;
+            
+            const img = document.getElementById('landmark-img');
+            const loader = document.getElementById('image-loader');
+            img.style.opacity = '0';
+            loader.classList.remove('hidden');
+            
+            img.src = landmark.url;
+            img.onload = () => { img.style.opacity = '1'; loader.classList.add('hidden'); };
+            img.onerror = () => { loader.classList.add('hidden'); img.src = "https://images.unsplash.com/photo-1543589077-47d81606c1bf?auto=format&fit=crop&q=80&w=1200"; img.style.opacity = '1'; };
+
+            if (userMarker) map.removeLayer(userMarker);
+            if (correctMarker) map.removeLayer(correctMarker);
+            if (lineToCorrect) map.removeLayer(lineToCorrect);
+            selectedCoords = null;
+            map.setView([51.415, -3.35], 11);
+        }
+
+        function onMapClick(e) {
+            if (!roundActive) return;
+            selectedCoords = e.latlng;
+            if (userMarker) {
+                userMarker.setLatLng(selectedCoords);
+            } else {
+                userMarker = L.marker(selectedCoords, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div class="w-6 h-6 bg-red-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center festive-pulse">🎁</div>`,
+                        iconSize: [24, 24], iconAnchor: [12, 12]
+                    })
+                }).addTo(map);
+            }
+            document.getElementById('btn-guess').disabled = false;
+        }
+
+        function submitGuess() {
+            if (!selectedCoords) return;
+            roundActive = false;
+            const target = landmarkData.locations[currentRound].coords;
+            const distance = map.distance(selectedCoords, target);
+            let points = distance <= 10 ? 5000 : Math.floor(5000 * Math.exp(-distance / 2000));
+            totalScore += points;
+            showRoundResult(distance, points);
+        }
+
+        function showRoundResult(distance, points) {
+            const target = landmarkData.locations[currentRound].coords;
+            correctMarker = L.circleMarker(target, { radius: 12, color: '#facc15', fillColor: '#facc15', fillOpacity: 1, className: 'animate-bounce' }).addTo(map);
+            lineToCorrect = L.polyline([selectedCoords, target], { color: '#ef4444', dashArray: '5, 10', weight: 3 }).addTo(map);
+            map.fitBounds(L.latLngBounds([selectedCoords, target]).pad(0.4));
+            const distTxt = distance < 1000 ? `${Math.round(distance)}m` : `${(distance/1000).toFixed(2)}km`;
+            document.getElementById('result-distance').innerText = distTxt;
+            document.getElementById('result-points').innerText = `+${points.toLocaleString()}`;
+            document.getElementById('total-score').innerText = totalScore.toLocaleString();
+            const titles = ["LEGENDARY ELF!", "SNOWBALL'S EYE", "WINTER WONDER", "LOST IN FOG", "SNOWED IN"];
+            let level = points > 4900 ? 0 : points > 4000 ? 1 : points > 2500 ? 2 : points > 1000 ? 3 : 4;
+            document.getElementById('result-title').innerText = titles[level];
+            document.getElementById('result-icon').innerText = ["🌟", "🎄", "🍪", "🧊", "❄️"][level];
+            document.getElementById('result-modal').classList.remove('hidden');
+        }
+
+        function nextRound() {
+            document.getElementById('result-modal').classList.add('hidden');
+            currentRound++;
+            if (currentRound < landmarkData.locations.length) loadRound();
+            else showFinalSummary();
+        }
+
+        function showFinalSummary() {
+            document.getElementById('final-total').innerText = totalScore.toLocaleString();
+            document.getElementById('final-overlay').classList.remove('hidden');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
