@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 
 function isAllowedOrigin(req) {
   const origin = req.get("origin");
-  if (!origin) return false;
+  if (!origin) return req.get("sec-fetch-site") === "same-origin";
   const ownOrigin = `${req.protocol}://${req.get("host")}`;
   return origin === ownOrigin || configuredOrigins.includes(origin);
 }
@@ -42,8 +42,10 @@ app.use("/api", (req, res, next) => {
   if (!isAllowedOrigin(req)) {
     return res.status(403).json({ error: "This API is only available to the Santa's Stash web client." });
   }
-  res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Vary", "Origin");
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Santas-Client");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);

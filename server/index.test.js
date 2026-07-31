@@ -52,6 +52,19 @@ test("game API rejects untrusted origins and missing client marker", async (t) =
   assert.equal(missingMarker.status, 403);
 });
 
+test("leaderboard accepts a production same-origin browser request without an Origin header", async (t) => {
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${baseUrl}/api/leaderboard`, {
+    headers: { "Sec-Fetch-Site": "same-origin", "X-Santas-Client": "web-v1" }
+  });
+  assert.equal(response.status, 200);
+  assert.ok(Array.isArray((await response.json()).highScores));
+});
+
 test("game API rejects non-alphanumeric and profane identities", async (t) => {
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
