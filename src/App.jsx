@@ -129,7 +129,12 @@ function GameMap({ selection, roundId, result, onSelect, onReady }) {
 
   useEffect(() => {
     const map = L.map(elementRef.current, { zoomControl: false, attributionControl: false }).setView([51.415, -3.35], 11);
-    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png").addTo(map);
+    L.control.attribution({ position: "topright" }).addTo(map);
+    const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      referrerPolicy: "strict-origin-when-cross-origin"
+    }).addTo(map);
     tiles.once("load", () => onReadyRef.current?.());
     map.on("click", (event) => onSelectRef.current(event.latlng));
     mapRef.current = map;
