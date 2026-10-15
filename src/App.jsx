@@ -325,7 +325,7 @@ export default function App() {
   };
 
   const shareResult = async () => {
-    const shareData = { title: "Santa's Stash", text: `I scored ${totalScore.toLocaleString()} points helping Santa across the Vale! Can you beat me and support Santa's Cause?`, url: window.location.href };
+    const shareData = { title: "Santa's Stash", text: `I scored ${totalScore.toLocaleString()} points helping Santa across the Vale! Can you beat me and support Santa's Cause?`, url: new URL("/share.html", window.location.origin).href };
     try {
       if (navigator.share) await navigator.share(shareData);
       else await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
